@@ -1,0 +1,112 @@
+---
+title: "Упражнение 1"
+author: "Дроздецкая Анна"
+date: "22 02 2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+C помощью пакета rvest или парсинга XML с помощью xpath запростов соберите данные с сайта согласно своему варианту. В итоговой таблице должно быть не менее 50 записей и не менее 5 признаков, из которых как минимум два количественныхю Снабдите файл справочником в формате Markdawn.
+Результаты: .csv-файл с данными, .md-файл со справочником, .Rmd-файл с кодом загрузки данных разместить в репозитории github, файл .Rmd должен содержать постановку задачи и комментарии по ходу сбора данных.
+
+## Загружаем библиотеку rvest и указываем ссылку на сайт
+
+```{r, warning=FALSE}
+library('rvest')
+# Ссылка на топ 20 фильмов 2020 года
+url <- 'https://www.kinopoisk.ru/top/y/2020/'
+
+webpage <- read_html(url)
+```
+
+# Место в топе
+
+```{r}
+# Парсим номер места, которое фильм занимает в топе
+rank <- webpage %>% html_nodes(".js-rum-hero td a") %>% html_attr("name")
+# Избавляемся от NA в массиве
+rank[!is.na(rank)]
+```
+# Названия на русском языке
+
+```{r}
+# Парсим названия фильмов на русском языке
+names_ru <- webpage %>% html_nodes(".all") %>% html_text
+# Избавляемся от лишнего
+names_ru <- names_ru[3:22]
+names_ru
+```
+
+# Названия на английском языке
+
+```{r}
+# Функция перебора тегов внутри тегов более высокого уровня
+get_tags <- function(node){
+  raw_data <- html_nodes(node, selector) %>% html_text
+  data_NAs <- ifelse(length(raw_data) == 0, NA, raw_data)
+}
+
+selector <- '.text-grey'
+
+new_names_en = array()
+
+# Парсим названия фильмов на английском языке
+for(i in 1:length(names_ru)){
+  tag <- paste0('#top250_place_', toString(i))
+  doc <- html_nodes(webpage, tag)
+  names_en <- sapply(doc, get_tags)
+  new_names_en <- append(new_names_en, names_en)
+}
+
+new_names_en = new_names_en[2:length(new_names_en)]
+new_names_en
+```
+
+# Рейтинг фильма
+
+```{r}
+# парсим рейтинг фильмов
+rating <- webpage %>% html_nodes(".continue") %>% html_text
+# Преобразуем строку в число
+rating <- as.numeric(rating)
+rating
+```
+
+# Количество голосов
+
+```{r}
+# Парсим количество голосов
+vote <- webpage %>% html_nodes(".js-rum-hero div span") %>% html_text
+# Избавляемся от скобок и пробелов
+vote <- gsub("[[:punct:]]", "", vote)
+vote <- gsub(pattern = "\\s", replacement = "", x=vote)
+# Преобразуем строку в число
+vote <- as.numeric(vote)
+vote
+```
+
+# Создание директории и сохранение DataFrame в .csv
+
+```{r}
+data.dir <- './data'
+
+# Создаем директорию для данных
+if (!file.exists(data.dir)) {
+  dir.create(data.dir)
+}
+
+# Создаём файл с логом загрузок
+log.filename <- './data/download.log'
+if (!file.exists(log.filename)) file.create(log.filename)
+
+DF <- data.frame(Rank = rank[!is.na(rank)], russian_name = names_ru,
+                            english_name = new_names_en, Rating = rating,
+                            Vote = vote)
+
+# Загружаем данные в .csv файл
+write.csv(DF, file = './data/kinopoisk_top_2020.csv', row.names = FALSE)
+write(paste('File "kinopoisk_top_2020.csv" downloaded, date: ', Sys.time()), file = log.filename, append = TRUE)
+```
